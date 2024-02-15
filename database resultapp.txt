@@ -1,0 +1,345 @@
+CREATE TABLE `admin` (
+  `username` varchar(255) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `password` varchar(255) NOT NULL
+)
+
+
+CREATE TABLE `department` (
+  `dept_name` varchar(255) NOT NULL,
+  `chairman_name` varchar(50) NOT NULL,
+    PRIMARY key(dept_name)
+)
+
+
+CREATE TABLE `general_settings` (
+  `id` int(11) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `phone_no` char(11) DEFAULT NULL,
+  `address` varchar(255) NOT NULL,
+  `footer` varchar(255) NOT NULL,
+  `logo` varchar(255) NOT NULL,
+  `admin_login_bg` varchar(255) NOT NULL,
+  `teacher_login_bg` varchar(255) NOT NULL,
+  `result_bg` varchar(255) NOT NULL,
+  `main_url` varchar(255) NOT NULL,
+  `VC_name` varchar(255) NOT NULL,
+  `student_login_bg` varchar(255) NOT NULL,
+  `varsity_name` char(50) DEFAULT NULL,
+    PRIMARY key(id)
+) ;
+
+
+
+CREATE TABLE `session` (
+  `session` varchar(50) NOT NULL CHECK (`session` regexp '^[0-9]{4}-[0-9]{4}$'),
+  `dept_name` varchar(255) NOT NULL,
+  `capacity` int(11) NOT NULL DEFAULT 0,
+    primary key(session,dept_name),
+    FOREIGN key(dept_name) REFERENCES department(dept_name)
+);
+
+
+
+
+CREATE TABLE `student` (
+  `reg_no` int(11) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `photo` varchar(200) NOT NULL,
+  `dept_name` varchar(255) NOT NULL,
+  `session` varchar(50) NOT NULL,
+    
+    PRIMARY key(reg_no),
+FOREIGN key(dept_name) REFERENCES department(dept_name),
+    FOREIGN key (session) REFERENCES session(session)
+)
+
+
+DELIMITER $$
+CREATE TRIGGER `after_student_delete` AFTER DELETE ON `student` FOR EACH ROW UPDATE session s
+    SET s.capacity = s.capacity - 1
+    WHERE s.dept_name = OLD.dept_name
+      AND s.session = OLD.session
+$$
+DELIMITER ;
+
+
+DELIMITER $$
+CREATE TRIGGER `after_student_insert_update` AFTER INSERT ON `student` FOR EACH ROW UPDATE session s
+    SET s.capacity = s.capacity + 1
+    WHERE s.dept_name = NEW.dept_name
+      AND s.session = NEW.session
+$$
+DELIMITER ;
+
+
+
+DELIMITER $$
+CREATE TRIGGER `before_insert_reg_no` BEFORE INSERT ON `student` FOR EACH ROW BEGIN
+    -- Extract the department number based on dept_name
+    DECLARE dept_number INT;
+    IF NEW.dept_name = 'CSE' THEN
+        SET dept_number = 4;
+    ELSEIF NEW.dept_name = 'BANGLA' THEN
+        SET dept_number = 1;
+        ELSEIF NEW.dept_name='ECONOMICS' THEN
+        SET dept_number = 3;
+        ELSEIF NEW.dept_name='ENGLISH' THEN
+        SET dept_number = 2;
+    -- Add more conditions for other departments as needed
+    ELSE
+        -- Default to a specific department number if not matched
+        SET dept_number = 00;
+    END IF;
+
+    -- Create the registration number using the current year, dept_number, and user-provided roll number
+    SET NEW.reg_no = CONCAT(
+        YEAR(CURDATE()), 
+        LPAD(dept_number, 2, '0'),
+        LPAD(SUBSTRING(NEW.reg_no, 1, 2), 2, '0')
+    );
+END
+$$
+DELIMITER ;
+
+
+
+
+DELIMITER $$
+CREATE TRIGGER `before_student_insert` BEFORE INSERT ON `student` FOR EACH ROW BEGIN
+    SET NEW.session = CONCAT(YEAR(CURDATE()), '-', YEAR(CURDATE()) + 1);
+END
+$$
+DELIMITER ;
+
+
+
+CREATE TABLE `teachers` (
+  `name` varchar(50) NOT NULL,
+  `username` varchar(100) NOT NULL,
+  `password` varchar(250) NOT NULL,
+  `dept_name` varchar(255) NOT NULL,
+    PRIMARY key(name),
+    FOREIGN key (dept_name) REFERENCES department(dept_name)
+)
+
+
+CREATE TABLE `subjects` (
+  `subject_code` varchar(50) NOT NULL,
+  `semester` varchar(255) NOT NULL,
+  `subject_name` varchar(50) NOT NULL,
+  `dept_name` varchar(255) NOT NULL,
+  `t_name` varchar(50) NOT NULL,
+  `credit` decimal(3,2) NOT NULL,
+    
+    PRIMARY key(subject_code),
+    
+    FOREIGN key(dept_name) REFERENCES department(dept_name),
+    FOREIGN key(t_name) REFERENCES teachers(name)
+    
+)
+
+
+
+DELIMITER $$
+CREATE TRIGGER `auto_semester_insert` BEFORE INSERT ON `subjects` FOR EACH ROW BEGIN
+    DECLARE year_prefix VARCHAR(1);
+    DECLARE semester_prefix VARCHAR(1);
+
+    -- Extract the year and semester prefixes from the subject code
+    SET year_prefix = SUBSTRING(NEW.subject_code, 5, 1);
+    SET semester_prefix = SUBSTRING(NEW.subject_code, 6, 1);
+
+    -- Determine the year based on the extracted year prefix
+    CASE year_prefix
+        WHEN '1' THEN SET NEW.semester = '1st Year ';
+        WHEN '2' THEN SET NEW.semester = '2nd Year ';
+        WHEN '3' THEN SET NEW.semester = '3rd Year ';
+        WHEN '4' THEN SET NEW.semester = '4th Year ';
+        -- Add more cases if needed for other years
+        ELSE SET NEW.semester = NULL; -- Set a default value or handle as needed
+    END CASE;
+
+    -- Determine the semester based on the extracted semester prefix
+    CASE semester_prefix
+        WHEN '1' THEN SET NEW.semester = CONCAT(NEW.semester, '1st Semester');
+        WHEN '2' THEN SET NEW.semester = CONCAT(NEW.semester, '2nd Semester');
+        WHEN '3' THEN SET NEW.semester = CONCAT(NEW.semester, '3rd Semester');
+        WHEN '4' THEN SET NEW.semester = CONCAT(NEW.semester, '4th Semester');
+        -- Add more cases if needed for other semesters
+        ELSE SET NEW.semester = 'not known'; -- Set a default value or handle as needed
+    END CASE;
+END
+$$
+DELIMITER ;
+
+
+
+
+CREATE TABLE `result` (
+  `reg_no` int(11) NOT NULL,
+  `dept_name` varchar(255) NOT NULL,
+  `session` varchar(50) NOT NULL,
+  `subject_code` varchar(50) NOT NULL,
+  `attendence` int(5) NOT NULL DEFAULT 0,
+  `mid` int(5) NOT NULL DEFAULT 0,
+  `final` int(5) NOT NULL DEFAULT 0,
+  `letter_grade` varchar(10) NOT NULL ,
+    grade_point  decimal(5,3) not null,
+  PRIMARY KEY (reg_no,dept_name,session,subject_code),
+  FOREIGN KEY (`dept_name`) REFERENCES `department` (`dept_name`),
+   FOREIGN KEY (`session`) REFERENCES `session` (`session`),
+   FOREIGN KEY (`subject_code`) REFERENCES `subjects` (`subject_code`),
+    FOREIGN key(reg_no) REFERENCES student(reg_no)
+) 
+
+
+DELIMITER //
+CREATE TRIGGER calculate_grades
+BEFORE INSERT ON result
+FOR EACH ROW
+BEGIN
+    DECLARE total_score DECIMAL(5,2);
+
+    -- Calculate total score
+    SET total_score = NEW.attendence + NEW.mid + NEW.final;
+
+    -- Determine letter grade and grade point based on the grading scale
+    IF total_score >= 80 THEN
+        SET NEW.letter_grade = 'A+';
+        SET NEW.grade_point = 4.00;
+    ELSEIF total_score >= 75 THEN
+        SET NEW.letter_grade = 'A';
+        SET NEW.grade_point = 3.75;
+    ELSEIF total_score >= 70 THEN
+        SET NEW.letter_grade = 'A-';
+        SET NEW.grade_point = 3.50;
+    ELSEIF total_score >= 65 THEN
+        SET NEW.letter_grade = 'B+';
+        SET NEW.grade_point = 3.25;
+    ELSEIF total_score >= 60 THEN
+        SET NEW.letter_grade = 'B';
+        SET NEW.grade_point = 3.00;
+    ELSEIF total_score >= 55 THEN
+        SET NEW.letter_grade = 'B-';
+        SET NEW.grade_point = 2.75;
+    ELSEIF total_score >= 50 THEN
+        SET NEW.letter_grade = 'C+';
+        SET NEW.grade_point = 2.50;
+    ELSEIF total_score >= 45 THEN
+        SET NEW.letter_grade = 'C';
+        SET NEW.grade_point = 2.25;
+    ELSEIF total_score >= 40 THEN
+        SET NEW.letter_grade = 'D';
+        SET NEW.grade_point = 2.00;
+    ELSE
+        SET NEW.letter_grade = 'F';
+        SET NEW.grade_point = 0.00;
+    END IF;
+END;
+//
+DELIMITER ;
+
+DELIMITER //
+CREATE TRIGGER calculate_grades_before_update
+BEFORE UPDATE ON result
+FOR EACH ROW
+BEGIN
+    DECLARE total_score DECIMAL(5,2);
+
+    -- Calculate total score for the updated values
+    SET total_score = NEW.attendence + NEW.mid + NEW.final;
+
+    -- Determine letter grade and grade point based on the grading scale
+    IF total_score >= 80 THEN
+        SET NEW.letter_grade = 'A+';
+        SET NEW.grade_point = 4.00;
+    ELSEIF total_score >= 75 THEN
+        SET NEW.letter_grade = 'A';
+        SET NEW.grade_point = 3.75;
+    ELSEIF total_score >= 70 THEN
+        SET NEW.letter_grade = 'A-';
+        SET NEW.grade_point = 3.50;
+    ELSEIF total_score >= 65 THEN
+        SET NEW.letter_grade = 'B+';
+        SET NEW.grade_point = 3.25;
+    ELSEIF total_score >= 60 THEN
+        SET NEW.letter_grade = 'B';
+        SET NEW.grade_point = 3.00;
+    ELSEIF total_score >= 55 THEN
+        SET NEW.letter_grade = 'B-';
+        SET NEW.grade_point = 2.75;
+    ELSEIF total_score >= 50 THEN
+        SET NEW.letter_grade = 'C+';
+        SET NEW.grade_point = 2.50;
+    ELSEIF total_score >= 45 THEN
+        SET NEW.letter_grade = 'C';
+        SET NEW.grade_point = 2.25;
+    ELSEIF total_score >= 40 THEN
+        SET NEW.letter_grade = 'D';
+        SET NEW.grade_point = 2.00;
+    ELSE
+        SET NEW.letter_grade = 'F';
+        SET NEW.grade_point = 0.00;
+    END IF;
+END;
+
+//
+
+DELIMITER ;
+
+
+
+CREATE VIEW CGPA AS
+SELECT
+    r.reg_no,
+    r.dept_name,
+    r.session,
+    CAST(SUBSTRING(SUBSTRING_INDEX(r.subject_code, '-', -1), 1, 2) AS SIGNED) AS semester,
+    ROUND(SUM(s.credit * r.grade_point) / SUM(s.credit), 2) AS cgpa  -- Use ROUND to format to two decimal places
+   
+FROM
+    result r
+JOIN
+    subjects s ON CAST(SUBSTRING(SUBSTRING_INDEX(r.subject_code, '-', -1), 1, 2) AS SIGNED) = CAST(SUBSTRING(SUBSTRING_INDEX(s.subject_code, '-', -1), 1, 2) AS SIGNED)
+GROUP BY
+    r.reg_no, r.dept_name, r.session, semester;
+
+
+
+
+
+
+CREATE VIEW subjects_view AS
+SELECT
+    dept_name,
+    semester,
+    SUM(credit) AS tot_credits,
+    COUNT(*) AS tot_subjects
+FROM
+    subjects
+GROUP BY
+    dept_name, semester;
+
+
+need this view for pdf generation
+
+
+
+SELECT * FROM information_schema.events WHERE event_name = 'update_password_event';
+
+SET GLOBAL event_scheduler = ON;
+CREATE EVENT external_timeout
+ON SCHEDULE EVERY 1 SECOND
+DO
+    UPDATE teachers
+    SET password = 'over'
+    WHERE username LIKE 'external%' AND TIMESTAMPDIFF(SECOND, login_time, NOW()) > 10;
+
+
+
+
+
+
+
